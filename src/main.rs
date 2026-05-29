@@ -23,7 +23,7 @@ fn main() {
         let size: u64 = file_size;
 
         let document = Document {
-            name: name,
+            name: name[2..].to_string(),
             size: size,
             is_dir: metadata.is_dir(),
         };
@@ -32,12 +32,10 @@ fn main() {
     }
 
     for file in files {
-        let name: &str = &file.name[2..];
-
         if file.is_dir {
-            println!("{}", format!("{} {} bytes", name, file.size).blue());
+            println!("{}", format!("{} {} bytes", file.name, file.size).blue());
         } else {
-            println!("{} {} bytes", name, file.size);
+            println!("{} {} bytes", file.name, file.size);
         }
     }
 }
