@@ -1,4 +1,5 @@
 use std::fs;
+use colored::Colorize;
 
 struct Document {
     name: String,
@@ -32,6 +33,11 @@ fn main() {
 
     for file in files {
         let name: &str = &file.name[2..];
-        println!("{} {} bytes (is_dir: {})", name, file.size, file.is_dir);
+
+        if file.is_dir {
+            println!("{}", format!("{} {} bytes", name, file.size).blue());
+        } else {
+            println!("{} {} bytes", name, file.size);
+        }
     }
 }
