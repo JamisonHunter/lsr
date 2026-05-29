@@ -1,26 +1,37 @@
 use std::fs;
 
+struct Document {
+    name: String,
+    size: u64,
+    is_dir: bool,
+}
+
 fn main() {
     let paths = fs::read_dir("./").unwrap();
-    let mut file_names: Vec<String> = Vec::new();
-    let mut file_sizes: Vec<u64> = Vec::new();
+    let mut files: Vec<Document> = Vec::new();
 
     for path in paths {
         let entry = path.unwrap();
         let path_buf = entry.path();
 
-        file_names.push(path_buf.display().to_string());
+        let name: String = path_buf.display().to_string();
 
         let metadata = fs::metadata(&path_buf).unwrap();
         let file_size = metadata.len();
 
-        file_sizes.push(file_size);
+        let size: u64 = file_size;
+
+        let document = Document {
+            name: name,
+            size: size,
+            is_dir: false,
+        };
+        
+        files.push(document);
     }
 
-    let mut index = 0;
-    for name in file_names {
-        let name = &name[2..];
-        println!("{} {} bytes", name, file_sizes[index]);
-        index += 1;
+    for file in files {
+        let name: &str = &file.name[2..];
+        println!("{} {} bytes", name, file.size);
     }
 }
