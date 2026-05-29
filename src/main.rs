@@ -9,7 +9,10 @@ fn main() {
     }
 
     for name in file_names {
+        let file = fs::File::create(&name).unwrap();
+        let file_size = file.metadata().unwrap().len();
+
         let name = &name[2..];
-        println!("{}", name);
+        println!("{} {}", name, file_size);
     }
 }
