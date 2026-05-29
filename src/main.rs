@@ -24,7 +24,7 @@ fn main() {
         let document = Document {
             name: name,
             size: size,
-            is_dir: false,
+            is_dir: metadata.is_dir(),
         };
         
         files.push(document);
@@ -32,6 +32,6 @@ fn main() {
 
     for file in files {
         let name: &str = &file.name[2..];
-        println!("{} {} bytes", name, file.size);
+        println!("{} {} bytes (is_dir: {})", name, file.size, file.is_dir);
     }
 }
