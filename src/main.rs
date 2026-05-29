@@ -19,8 +19,6 @@ fn main() {
 
     let mut index = 0;
     for name in file_names {
-        // let file_size = file.metadata().unwrap().len();
-
         let name = &name[2..];
         println!("{} {} bytes", name, file_sizes[index]);
         index += 1;
