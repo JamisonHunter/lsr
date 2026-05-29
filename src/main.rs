@@ -9,7 +9,7 @@ struct Document {
 
 fn main() {
     let paths = fs::read_dir("./").unwrap();
-    let mut files: Vec<Document> = Vec::new();
+    let mut documents: Vec<Document> = Vec::new();
 
     for path in paths {
         let entry = path.unwrap();
@@ -18,24 +18,21 @@ fn main() {
         let name: String = path_buf.display().to_string();
 
         let metadata = fs::metadata(&path_buf).unwrap();
-        let file_size = metadata.len();
-
-        let size: u64 = file_size;
 
         let document = Document {
             name: name[2..].to_string(),
-            size: size,
+            size: metadata.len(),
             is_dir: metadata.is_dir(),
         };
         
-        files.push(document);
+        documents.push(document);
     }
 
-    for file in files {
-        if file.is_dir {
-            println!("{}", format!("{} {} bytes", file.name, file.size).blue());
+    for document in documents {
+        if document.is_dir {
+            println!("{}", format!("{} {} bytes", document.name, document.size).blue());
         } else {
-            println!("{} {} bytes", file.name, file.size);
+            println!("{} {} bytes", document.name, document.size);
         }
     }
 }
