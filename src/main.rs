@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs::{self, DirEntry, Metadata}, io::Error};
 use colored::Colorize;
 
 struct Document {
@@ -10,17 +10,27 @@ struct Document {
 fn format_bytes(bytes: u64) -> String {
     if bytes >= 1000000000 {
         let gigabytes: f64 = bytes as f64 / 1000000000 as f64;
-        return format!("{:.1} Gb", gigabytes);
+        return format!("{:.1}Gb", gigabytes);
     }
     if bytes >= 1000000 {
         let megabytes: f64 = bytes as f64 / 1000000 as f64;
-        return format!("{:.1} Mb", megabytes);
+        return format!("{:.1}Mb", megabytes);
     }
     if bytes >= 1000 {
         let kilobytes: f64 = bytes as f64 / 1000 as f64;
-        return format!("{:.1} Kb", kilobytes);
+        return format!("{:.1}Kb", kilobytes);
     }
-    return format!("{} bytes", bytes);
+    return format!("{}", bytes);
+}
+
+fn get_metadata(path: Result<DirEntry, Error>) -> (Metadata, String) {
+    let entry = path.unwrap();
+    let path_buf = entry.path();
+
+    let metadata = fs::metadata(&path_buf).unwrap();
+    let name: String = path_buf.display().to_string();
+    
+    return (metadata, name);
 }
 
 fn get_dir_size(file_path: String) -> u64 {
@@ -29,12 +39,7 @@ fn get_dir_size(file_path: String) -> u64 {
     let mut total_size: u64 = 0;
 
     for path in paths {
-        let entry = path.unwrap();
-        let path_buf = entry.path();
-
-        let metadata = fs::metadata(&path_buf).unwrap();
-
-        let name: String = path_buf.display().to_string();
+        let (metadata, name) = get_metadata(path);
 
         if metadata.is_dir() {
             total_size += get_dir_size(name[2..].to_string());
@@ -51,12 +56,7 @@ fn main() {
     let mut documents: Vec<Document> = Vec::new();
 
     for path in paths {
-        let entry = path.unwrap();
-        let path_buf = entry.path();
-
-        let name: String = path_buf.display().to_string();
-
-        let metadata = fs::metadata(&path_buf).unwrap();
+        let (metadata, name) = get_metadata(path);
 
         let document = Document {
             name: name[2..].to_string(),
