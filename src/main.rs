@@ -1,4 +1,4 @@
-use std::{fs::{self, DirEntry, Metadata}, io::Error, path::PathBuf};
+use std::{env, fs::{self, DirEntry, Metadata}, io::Error, path::PathBuf};
 use colored::Colorize;
 
 struct Document {
@@ -9,25 +9,24 @@ struct Document {
 }
 
 fn format_bytes(bytes: u64) -> String {
-    if bytes >= 1000000000 {
-        let gigabytes: f64 = bytes as f64 / 1000000000 as f64;
+    if bytes >= 1_000_000_000 {
+        let gigabytes: f64 = bytes as f64 / 1_000_000_000 as f64;
         return format!("{:.1}Gb", gigabytes);
     }
-    if bytes >= 1000000 {
-        let megabytes: f64 = bytes as f64 / 1000000 as f64;
+    if bytes >= 1_000_000 {
+        let megabytes: f64 = bytes as f64 / 1_000_000 as f64;
         return format!("{:.1}Mb", megabytes);
     }
-    if bytes >= 1000 {
-        let kilobytes: f64 = bytes as f64 / 1000 as f64;
+    if bytes >= 1_000 {
+        let kilobytes: f64 = bytes as f64 / 1_000 as f64;
         return format!("{:.1}Kb", kilobytes);
     }
-    return format!("{}", bytes);
+    format!("{}", bytes)
 }
 
 fn get_metadata(path: Result<DirEntry, Error>) -> Result<(Metadata, PathBuf), Error> {
     let entry = path?;
     let path_buf = entry.path();
-
     let metadata = fs::metadata(&path_buf)?;
     Ok((metadata, path_buf))
 }
@@ -46,11 +45,37 @@ fn get_dir_size(path: PathBuf) -> Result<u64, std::io::Error> {
             total_size += metadata.len();
         }
     }
-
     Ok(total_size)
 }
 
+fn print_help() {
+    println!("Directory size viewer");
+    println!();
+    println!("Usage: {} [OPTION]", env::args().next().unwrap_or_else(|| "dirsize".to_string()));
+    println!();
+    println!("Options:");
+    println!("  -h, --help     Show this help message");
+    println!();
+    println!("With no arguments, lists all items in the current directory with their sizes.");
+}
+
 fn main() -> Result<(), std::io::Error> {
+    let mut args = env::args().skip(1); // skip the program name
+
+    match args.next() {
+        None => {
+            // pass
+        }
+        Some(arg) if arg == "-h" || arg == "--help" => {
+            print_help();
+            return Ok(());
+        }
+        Some(_) => {
+            eprintln!("Invalid argument. Use -h or --help for usage information.");
+            std::process::exit(1);
+        }
+    }
+
     let paths = fs::read_dir(".")?;
     let mut documents: Vec<Document> = Vec::new();
 
@@ -67,7 +92,6 @@ fn main() -> Result<(), std::io::Error> {
                     is_dir: metadata.is_dir(),
                     path: path_buf,
                 };
-                
                 documents.push(document);
             }
             Err(_) => continue,
@@ -86,5 +110,6 @@ fn main() -> Result<(), std::io::Error> {
             println!("{} {}", document.name, format_bytes(document.size));
         }
     }
+
     Ok(())
 }
