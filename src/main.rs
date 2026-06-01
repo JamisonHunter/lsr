@@ -1,10 +1,11 @@
-use std::{fs::{self, DirEntry, Metadata}, io::Error};
+use std::{fs::{self, DirEntry, Metadata}, io::Error, path::PathBuf};
 use colored::Colorize;
 
 struct Document {
     name: String,
     size: u64,
     is_dir: bool,
+    path: PathBuf,
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -23,56 +24,67 @@ fn format_bytes(bytes: u64) -> String {
     return format!("{}", bytes);
 }
 
-fn get_metadata(path: Result<DirEntry, Error>) -> (Metadata, String) {
-    let entry = path.unwrap();
+fn get_metadata(path: Result<DirEntry, Error>) -> Result<(Metadata, PathBuf), Error> {
+    let entry = path?;
     let path_buf = entry.path();
 
-    let metadata = fs::metadata(&path_buf).unwrap();
-    let name: String = path_buf.display().to_string();
-    
-    return (metadata, name);
+    let metadata = fs::metadata(&path_buf)?;
+    Ok((metadata, path_buf))
 }
 
-fn get_dir_size(file_path: String) -> u64 {
-    let path_str = format!("./{}", file_path);
-    let paths = fs::read_dir(path_str).unwrap();
+fn get_dir_size(path: PathBuf) -> Result<u64, std::io::Error> {
+    let paths = fs::read_dir(&path)?;
     let mut total_size: u64 = 0;
 
-    for path in paths {
-        let (metadata, name) = get_metadata(path);
+    for path_entry in paths {
+        let entry = path_entry?;
+        let metadata = entry.metadata()?;
 
         if metadata.is_dir() {
-            total_size += get_dir_size(name[2..].to_string());
+            total_size += get_dir_size(entry.path())?;
         } else {
             total_size += metadata.len();
         }
+    }
 
-    }    
-    return total_size;
+    Ok(total_size)
 }
 
-fn main() {
-    let paths = fs::read_dir("./").unwrap();
+fn main() -> Result<(), std::io::Error> {
+    let paths = fs::read_dir(".")?;
     let mut documents: Vec<Document> = Vec::new();
 
     for path in paths {
-        let (metadata, name) = get_metadata(path);
+        match get_metadata(path) {
+            Ok((metadata, path_buf)) => {
+                let name = path_buf.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path_buf.display().to_string());
 
-        let document = Document {
-            name: name[2..].to_string(),
-            size: metadata.len(),
-            is_dir: metadata.is_dir(),
-        };
-        
-        documents.push(document);
+                let document = Document {
+                    name,
+                    size: metadata.len(),
+                    is_dir: metadata.is_dir(),
+                    path: path_buf,
+                };
+                
+                documents.push(document);
+            }
+            Err(_) => continue,
+        }
     }
 
     for document in documents {
         if document.is_dir {
-            let file_size = get_dir_size(document.name.clone());
-            println!("{}", format!("{} {}", document.name, format_bytes(file_size)).blue());
+            match get_dir_size(document.path.clone()) {
+                Ok(file_size) => {
+                    println!("{}", format!("{} {}", document.name, format_bytes(file_size)).blue());
+                }
+                Err(_) => continue,
+            }
         } else {
             println!("{} {}", document.name, format_bytes(document.size));
         }
     }
+    Ok(())
 }
