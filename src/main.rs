@@ -10,18 +10,14 @@ struct Document {
 
 fn format_bytes(bytes: u64) -> String {
     if bytes >= 1_000_000_000 {
-        let gigabytes: f64 = bytes as f64 / 1_000_000_000 as f64;
-        return format!("{:.1}Gb", gigabytes);
+        format!("{:.1}Gb", bytes as f64 / 1_000_000_000.0)
+    } else if bytes >= 1_000_000 {
+        format!("{:.1}Mb", bytes as f64 / 1_000_000.0)
+    } else if bytes >= 1_000 {
+        format!("{:.1}Kb", bytes as f64 / 1_000.0)
+    } else {
+        format!("{}", bytes)
     }
-    if bytes >= 1_000_000 {
-        let megabytes: f64 = bytes as f64 / 1_000_000 as f64;
-        return format!("{:.1}Mb", megabytes);
-    }
-    if bytes >= 1_000 {
-        let kilobytes: f64 = bytes as f64 / 1_000 as f64;
-        return format!("{:.1}Kb", kilobytes);
-    }
-    format!("{}", bytes)
 }
 
 fn get_metadata(path: Result<DirEntry, Error>) -> Result<(Metadata, PathBuf), Error> {
@@ -55,17 +51,16 @@ fn print_help() {
     println!();
     println!("Options:");
     println!("  -h, --help     Show this help message");
+    println!("  -v, --version  Show version information");
     println!();
-    println!("With no arguments, lists all items in the current directory with their sizes.");
+    println!("With no arguments, lists all items sorted by size (largest first).");
 }
 
 fn main() -> Result<(), std::io::Error> {
-    let mut args = env::args().skip(1); // skip the program name
+    let mut args = env::args().skip(1);
 
     match args.next() {
-        None => {
-            // pass
-        }
+        None => {},
         Some(arg) if arg == "-h" || arg == "--help" => {
             print_help();
             return Ok(());
@@ -90,30 +85,42 @@ fn main() -> Result<(), std::io::Error> {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| path_buf.display().to_string());
 
-                let document = Document {
+                documents.push(Document {
                     name,
                     size: metadata.len(),
                     is_dir: metadata.is_dir(),
                     path: path_buf,
-                };
-                documents.push(document);
+                });
             }
             Err(_) => continue,
         }
     }
 
-    documents.sort_by_key(|d| std::cmp::Reverse(d.size));
+    let mut sized_docs: Vec<Document> = Vec::new();
 
-    for document in documents {
-        if document.is_dir {
-            match get_dir_size(document.path.clone()) {
-                Ok(file_size) => {
-                    println!("{}", format!("{} ({})", document.name, format_bytes(file_size)).blue());
-                }
-                Err(_) => continue,
-            }
+    for doc in documents {
+        let real_size = if doc.is_dir {
+            get_dir_size(doc.path.clone()).unwrap_or(0)
         } else {
-            println!("{} ({})", document.name, format_bytes(document.size));
+            doc.size
+        };
+
+        sized_docs.push(Document {
+            name: doc.name,
+            size: real_size,
+            is_dir: doc.is_dir,
+            path: doc.path,
+        });
+    }
+
+    sized_docs.sort_by_key(|d| std::cmp::Reverse(d.size));
+
+    for document in sized_docs {
+        let output = format!("{} ({})", document.name, format_bytes(document.size));
+        if document.is_dir {
+            println!("{}", output.blue());
+        } else {
+            println!("{}", output);
         }
     }
 
