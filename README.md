@@ -2,6 +2,8 @@
 
 Lsr is a Rust CLI tool that functions similarly to ls with the specific goal of displaying directory sizes through recursion. 
 
+![Terminal with valid lsr CLI commands](image.png)
+
 ### Motivation
 
 I wanted a very simple CLI tool that I could use to check directory sizes rather than using more complex software just to check a folder size quickly. 
