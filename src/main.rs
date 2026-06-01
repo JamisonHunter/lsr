@@ -70,6 +70,10 @@ fn main() -> Result<(), std::io::Error> {
             print_help();
             return Ok(());
         }
+        Some(arg) if arg == "-v" || arg == "--version" => {
+            println!("{}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
         Some(_) => {
             eprintln!("Invalid argument. Use -h or --help for usage information.");
             std::process::exit(1);
