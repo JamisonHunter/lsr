@@ -102,6 +102,8 @@ fn main() -> Result<(), std::io::Error> {
         }
     }
 
+    documents.sort_by_key(|d| std::cmp::Reverse(d.size));
+
     for document in documents {
         if document.is_dir {
             match get_dir_size(document.path.clone()) {
