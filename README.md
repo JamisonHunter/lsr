@@ -1,4 +1,4 @@
-# Powergrab
+# Lsr
 
 Lsr is a Rust CLI tool that functions similarly to ls with the specific goal of displaying directory sizes through recursion. 
 
