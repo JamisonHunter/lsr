@@ -102,12 +102,12 @@ fn main() -> Result<(), std::io::Error> {
         if document.is_dir {
             match get_dir_size(document.path.clone()) {
                 Ok(file_size) => {
-                    println!("{}", format!("{} {}", document.name, format_bytes(file_size)).blue());
+                    println!("{}", format!("{} ({})", document.name, format_bytes(file_size)).blue());
                 }
                 Err(_) => continue,
             }
         } else {
-            println!("{} {}", document.name, format_bytes(document.size));
+            println!("{} ({})", document.name, format_bytes(document.size));
         }
     }
 
