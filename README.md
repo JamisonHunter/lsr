@@ -4,7 +4,7 @@ A lightweight CLI tool for browsing local files with recursive file sizing.
 
 ![Terminal with valid lsr CLI commands](image.png)
 
-### Motivation
+## Motivation
 
 I wanted a very simple CLI tool that I could use to check directory sizes rather than using more complex software just to check a folder size quickly. 
 
@@ -33,3 +33,9 @@ I wanted a very simple CLI tool that I could use to check directory sizes rather
     sudo mv target/release/lsr /usr/local/bin/
 
 5. Lastly, type 'lsr' into the terminal in order to check if it is working. 
+
+## Pending changes 
+
+* Format terminal output relative to terminal size. 
+
+* Add flag to display dot files. 

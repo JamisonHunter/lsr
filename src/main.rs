@@ -1,4 +1,4 @@
-use std::{env, fs::{self, DirEntry, Metadata}, io::Error, path::PathBuf};
+use std::{env, fs::{self, DirEntry, Metadata}, io::Error, path::PathBuf, println};
 use colored::Colorize;
 
 struct Document {
@@ -98,6 +98,8 @@ fn main() -> Result<(), std::io::Error> {
 
     let mut sized_docs: Vec<Document> = Vec::new();
 
+    let mut total_storage: u64 = 0;
+
     for doc in documents {
         let real_size = if doc.is_dir {
             get_dir_size(doc.path.clone()).unwrap_or(0)
@@ -111,9 +113,17 @@ fn main() -> Result<(), std::io::Error> {
             is_dir: doc.is_dir,
             path: doc.path,
         });
+
+        total_storage += real_size;
     }
 
     sized_docs.sort_by_key(|d| std::cmp::Reverse(d.size));
+
+    if total_storage > 0 {
+        let total_storage_output = format!("Current directory storage: {}", format_bytes(total_storage));
+        println!("{}", total_storage_output.green());
+        println!("");
+    }
 
     for document in sized_docs {
         let output = format!("{} ({})", document.name, format_bytes(document.size));
