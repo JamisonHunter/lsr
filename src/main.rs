@@ -138,9 +138,9 @@ fn main() -> Result<(), std::io::Error> {
 
     sized_docs.sort_by_key(|d| std::cmp::Reverse(d.size));
 
+    let total_storage_output = format!("Current directory storage: {}", format_bytes(total_storage));
+    println!("{}", total_storage_output.green());
     if total_storage > 0 {
-        let total_storage_output = format!("Current directory storage: {}", format_bytes(total_storage));
-        println!("{}", total_storage_output.green());
         println!("");
     }
 
