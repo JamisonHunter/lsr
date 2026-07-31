@@ -109,7 +109,7 @@ fn main() -> Result<(), std::io::Error> {
 
     let progress = ProgressBar::new(documents.len() as u64);
     progress.set_style(
-        ProgressStyle::with_template("{msg} {spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+        ProgressStyle::with_template("{msg} {spinner:.green} [{bar:40.cyan/blue}] {pos}/{len}")
             .unwrap()
             .tick_chars("⠁⠂⠄⠂"),
     );
