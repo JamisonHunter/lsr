@@ -1,6 +1,6 @@
-# Lsr
+# LSR
 
-A lightweight CLI tool for browsing local files with recursive file sizing.
+A lightweight CLI tool made in Rust for browsing local files with recursive file sizing. 
 
 ![Terminal with valid lsr CLI commands](image.png)
 
@@ -14,7 +14,7 @@ I wanted a very simple CLI tool that I could use to check directory sizes rather
 
 - [Rust](https://www.rust-lang.org/tools/install)
 
-### Build and Install for Linux
+### Build & Install For Linux
 
 1. Clone the repository:
    ```bash
@@ -33,7 +33,3 @@ I wanted a very simple CLI tool that I could use to check directory sizes rather
     sudo mv target/release/lsr /usr/local/bin/
 
 5. Lastly, type 'lsr' into the terminal in order to check if it is working. 
-
-## Pending changes 
-
-* Format terminal output relative to terminal size. 
