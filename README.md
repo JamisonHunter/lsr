@@ -14,7 +14,7 @@ I wanted a very simple CLI tool that I could use to check directory sizes rather
 
 - [Rust](https://www.rust-lang.org/tools/install)
 
-### Build and Install
+### Build and Install for Linux
 
 1. Clone the repository:
    ```bash
