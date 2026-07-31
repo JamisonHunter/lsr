@@ -1,5 +1,6 @@
 use std::{env, fs::{self, DirEntry, Metadata}, io::Error, path::PathBuf, println};
 use colored::Colorize;
+use indicatif::{ProgressBar, ProgressStyle};
 
 struct Document {
     name: String,
@@ -106,6 +107,14 @@ fn main() -> Result<(), std::io::Error> {
 
     let mut sized_docs: Vec<Document> = Vec::new();
 
+    let progress = ProgressBar::new(documents.len() as u64);
+    progress.set_style(
+        ProgressStyle::with_template("{msg} {spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+            .unwrap()
+            .tick_chars("⠁⠂⠄⠂"),
+    );
+    progress.set_message("Computing sizes");
+
     let mut total_storage: u64 = 0;
 
     for doc in documents {
@@ -133,10 +142,11 @@ fn main() -> Result<(), std::io::Error> {
             });
         }
 
-        
-
         total_storage += real_size;
+        progress.inc(1);
     }
+
+    progress.finish_and_clear();
 
     sized_docs.sort_by_key(|d| std::cmp::Reverse(d.size));
 
