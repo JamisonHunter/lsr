@@ -113,7 +113,7 @@ fn main() -> Result<(), std::io::Error> {
             .unwrap()
             .tick_chars("⠁⠂⠄⠂"),
     );
-    progress.set_message("Computing sizes");
+    progress.set_message("Loading");
 
     let mut total_storage: u64 = 0;
 
