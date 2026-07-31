@@ -9,12 +9,14 @@ struct Document {
 }
 
 fn format_bytes(bytes: u64) -> String {
-    if bytes >= 1_000_000_000 {
-        return format!("{:.1}Gb", bytes as f64 / 1_000_000_000.0)
+    if bytes >= 1_000_000_000_000 {
+        return format!("{:.1} TiB", bytes as f64 / 1_000_000_000_000.0)
+    } else if bytes >= 1_000_000_000 {
+        return format!("{:.1} GiB", bytes as f64 / 1_000_000_000.0)
     } else if bytes >= 1_000_000 {
-        return format!("{:.1}Mb", bytes as f64 / 1_000_000.0)
+        return format!("{:.1} MiB", bytes as f64 / 1_000_000.0)
     } else if bytes >= 1_000 {
-        return format!("{:.1}Kb", bytes as f64 / 1_000.0)
+        return format!("{:.1} KiB", bytes as f64 / 1_000.0)
     } else {
         return format!("{}", bytes)
     }
@@ -114,7 +116,7 @@ fn main() -> Result<(), std::io::Error> {
         };
 
         if show_dot_files == false {
-            if doc.name.chars().nth(0).unwrap() != '.' {
+            if !doc.name.starts_with('.') {
                 sized_docs.push(Document {
                     name: doc.name,
                     size: real_size,
