@@ -37,5 +37,3 @@ I wanted a very simple CLI tool that I could use to check directory sizes rather
 ## Pending changes 
 
 * Format terminal output relative to terminal size. 
-
-* Add flag to display dot files. 

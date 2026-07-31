@@ -50,6 +50,7 @@ fn print_help() {
     println!("Usage: {} [OPTION]", env::args().next().unwrap_or_else(|| "dirsize".to_string()));
     println!();
     println!("Options:");
+    println!("  -a             Show all files including hidden files (dot files)");
     println!("  -h, --help     Show this help message");
     println!("  -v, --version  Show version information");
     println!();
@@ -58,6 +59,8 @@ fn print_help() {
 
 fn main() -> Result<(), std::io::Error> {
     let mut args = env::args().skip(1);
+
+    let mut show_dot_files: bool = false;
 
     match args.next() {
         None => {},
@@ -68,6 +71,9 @@ fn main() -> Result<(), std::io::Error> {
         Some(arg) if arg == "-v" || arg == "--version" => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             return Ok(());
+        }
+        Some(arg) if arg == "-a" => {
+            show_dot_files = true;
         }
         Some(_) => {
             eprintln!("Invalid argument. Use -h or --help for usage information.");
@@ -107,12 +113,25 @@ fn main() -> Result<(), std::io::Error> {
             doc.size
         };
 
-        sized_docs.push(Document {
-            name: doc.name,
-            size: real_size,
-            is_dir: doc.is_dir,
-            path: doc.path,
-        });
+        if show_dot_files == false {
+            if doc.name.chars().nth(0).unwrap() != '.' {
+                sized_docs.push(Document {
+                    name: doc.name,
+                    size: real_size,
+                    is_dir: doc.is_dir,
+                    path: doc.path,
+                });
+            }
+        } else {
+            sized_docs.push(Document {
+                name: doc.name,
+                size: real_size,
+                is_dir: doc.is_dir,
+                path: doc.path,
+            });
+        }
+
+        
 
         total_storage += real_size;
     }
