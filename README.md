@@ -33,3 +33,7 @@ I wanted a very simple CLI tool that I could use to check directory sizes rather
     sudo mv target/release/lsr /usr/local/bin/
 
 5. Lastly, type 'lsr' into the terminal in order to check if it is working. 
+
+## Planned Changes
+
+* Loading bar for larger file trees. 
