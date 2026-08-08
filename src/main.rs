@@ -1,6 +1,10 @@
 use std::{env, fs::{self, DirEntry, Metadata}, io::Error, path::PathBuf, println};
 use colored::Colorize;
+use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
+
+const MAX_BAR_WIDTH: usize = 40;
+const MIN_BAR_WIDTH: usize = 5;
 
 struct Document {
     name: String,
@@ -21,6 +25,20 @@ fn format_bytes(bytes: u64) -> String {
     } else {
         return format!("{}", bytes)
     }
+}
+
+fn bar_width(total_docs: usize) -> usize {
+    let term_width = match Term::stdout().size_checked() {
+        Some((_, cols)) => cols as usize,
+        None => return MAX_BAR_WIDTH,
+    };
+
+    let digits = total_docs.max(1).to_string().len();
+    let overhead = 15 + 2 * digits;
+
+    term_width
+        .saturating_sub(overhead)
+        .clamp(MIN_BAR_WIDTH, MAX_BAR_WIDTH)
 }
 
 fn get_metadata(path: Result<DirEntry, Error>) -> Result<(Metadata, PathBuf), Error> {
@@ -53,11 +71,11 @@ fn print_help() {
     println!("Usage: {} [OPTION]", env::args().next().unwrap_or_else(|| "dirsize".to_string()));
     println!();
     println!("Options:");
-    println!("  -a             Show all files including hidden files (dot files)");
+    println!("  -a             Show all files including dot files");
     println!("  -h, --help     Show this help message");
     println!("  -v, --version  Show version information");
     println!();
-    println!("With no arguments, lists all items sorted by size (largest first).");
+    println!("With no arguments, lists all items sorted by storage size.");
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -109,9 +127,12 @@ fn main() -> Result<(), std::io::Error> {
 
     let progress = ProgressBar::new(documents.len() as u64);
     progress.set_style(
-        ProgressStyle::with_template("{msg} {spinner:.green} [{bar:40.cyan/blue}] {pos}/{len}")
-            .unwrap()
-            .tick_chars("⠁⠂⠄⠂"),
+        ProgressStyle::with_template(&format!(
+            "{{msg}} {{spinner:.green}} [{{bar:{}.cyan/blue}}] {{pos}}/{{len}}",
+            bar_width(documents.len())
+        ))
+        .unwrap()
+        .tick_chars("⠁⠂⠄⠂"),
     );
     progress.set_message("Loading");
 
