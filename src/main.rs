@@ -128,11 +128,10 @@ fn main() -> Result<(), std::io::Error> {
     let progress = ProgressBar::new(100 as u64);
     progress.set_style(
         ProgressStyle::with_template(&format!(
-            "{{msg}} {{spinner:.green}} [{{bar:{}.cyan/blue}}] {{pos}}%",
+            "{{msg}} [{{bar:{}.cyan/blue}}] {{pos}}%",
             bar_width(documents.len())
         ))
-        .unwrap()
-        .tick_chars("⠁⠂⠄⠂"),
+        .unwrap(),
     );
     progress.set_message("Scanning");
 
