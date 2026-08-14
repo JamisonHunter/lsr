@@ -125,20 +125,20 @@ fn main() -> Result<(), std::io::Error> {
 
     let mut sized_docs: Vec<Document> = Vec::new();
 
-    let progress = ProgressBar::new(documents.len() as u64);
+    let progress = ProgressBar::new(100 as u64);
     progress.set_style(
         ProgressStyle::with_template(&format!(
-            "{{msg}} {{spinner:.green}} [{{bar:{}.cyan/blue}}] {{pos}}/{{len}}",
+            "{{msg}} {{spinner:.green}} [{{bar:{}.cyan/blue}}] {{pos}}%",
             bar_width(documents.len())
         ))
         .unwrap()
         .tick_chars("⠁⠂⠄⠂"),
     );
-    progress.set_message("Loading");
+    progress.set_message("Scanning");
 
     let mut total_storage: u64 = 0;
 
-    for doc in documents {
+    for doc in &documents {
         let real_size = if doc.is_dir {
             get_dir_size(doc.path.clone()).unwrap_or(0)
         } else {
@@ -148,23 +148,24 @@ fn main() -> Result<(), std::io::Error> {
         if show_dot_files == false {
             if !doc.name.starts_with('.') {
                 sized_docs.push(Document {
-                    name: doc.name,
+                    name: doc.name.clone(),
                     size: real_size,
                     is_dir: doc.is_dir,
-                    path: doc.path,
+                    path: doc.path.clone(),
                 });
             }
         } else {
             sized_docs.push(Document {
-                name: doc.name,
+                name: doc.name.clone(),
                 size: real_size,
                 is_dir: doc.is_dir,
-                path: doc.path,
+                path: doc.path.clone(),
             });
         }
+        let increment: u64 = (100 / &documents.len()).try_into().unwrap();
 
         total_storage += real_size;
-        progress.inc(1);
+        progress.inc(increment);
     }
 
     progress.finish_and_clear();
