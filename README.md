@@ -50,3 +50,6 @@ Options:
 lsr always scans the directory you are currently in. Run it with no arguments to
 list everything in that directory, sorted largest to smallest. Directory sizes are the recursive total of everything inside of them, so you can see how much space a folder is really using.
 
+## Planned additions
+
+* Unit tests
