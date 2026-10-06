@@ -188,3 +188,60 @@ fn main() -> Result<(), std::io::Error> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = env::temp_dir().join(format!("lsr-test-{}-{}", name, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn format_bytes_below_one_kilobyte() {
+        assert_eq!(format_bytes(0), "0");
+        assert_eq!(format_bytes(999), "999");
+    }
+
+    #[test]
+    fn format_bytes_unit_boundaries() {
+        assert_eq!(format_bytes(1_000), "1.0 KiB");
+        assert_eq!(format_bytes(1_000_000), "1.0 MiB");
+        assert_eq!(format_bytes(1_000_000_000), "1.0 GiB");
+        assert_eq!(format_bytes(1_000_000_000_000), "1.0 TiB");
+    }
+
+    #[test]
+    fn format_bytes_rounds_to_one_decimal() {
+        assert_eq!(format_bytes(1_550), "1.6 KiB");
+        assert_eq!(format_bytes(999_999), "1000.0 KiB");
+    }
+
+    #[test]
+    fn get_dir_size_empty_dir_is_zero() {
+        let dir = temp_dir("empty");
+        assert_eq!(get_dir_size(dir.clone()).unwrap(), 0);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn get_dir_size_sums_nested_files() {
+        let dir = temp_dir("nested");
+        fs::write(dir.join("a.txt"), vec![0u8; 100]).unwrap();
+        fs::create_dir_all(dir.join("sub/deeper")).unwrap();
+        fs::write(dir.join("sub/b.txt"), vec![0u8; 250]).unwrap();
+        fs::write(dir.join("sub/deeper/c.txt"), vec![0u8; 50]).unwrap();
+
+        assert_eq!(get_dir_size(dir.clone()).unwrap(), 400);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn get_dir_size_missing_dir_is_error() {
+        let dir = env::temp_dir().join("lsr-test-does-not-exist");
+        assert!(get_dir_size(dir).is_err());
+    }
+}
