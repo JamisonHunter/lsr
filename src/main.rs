@@ -1,10 +1,13 @@
 use std::{env, fs::{self, DirEntry, Metadata}, io::Error, path::PathBuf, println};
-use colored::Colorize;
 use console::Term;
 use indicatif::{ProgressBar, ProgressStyle};
 
 const MAX_BAR_WIDTH: usize = 40;
 const MIN_BAR_WIDTH: usize = 5;
+
+const GREEN: &str = "\x1b[38;2;95;184;143m";
+const BRIGHT_BLUE: &str = "\x1b[38;2;124;196;255m";
+const RESET: &str = "\x1b[0m";
 
 struct Document {
     name: String,
@@ -128,7 +131,7 @@ fn main() -> Result<(), std::io::Error> {
     let progress = ProgressBar::new(100 as u64);
     progress.set_style(
         ProgressStyle::with_template(&format!(
-            "{{msg}} [{{bar:{}.cyan/blue}}] {{pos}}%",
+            "{{msg}} [{{bar:{}.bright_cyan/bright_blue}}] {{pos}}%",
             bar_width(documents.len())
         ))
         .unwrap(),
@@ -172,7 +175,7 @@ fn main() -> Result<(), std::io::Error> {
     sized_docs.sort_by_key(|d| std::cmp::Reverse(d.size));
 
     let total_storage_output = format!("Current directory storage: {}", format_bytes(total_storage));
-    println!("{}", total_storage_output.green());
+    println!("{}{}{}", GREEN, total_storage_output, RESET);
     if total_storage > 0 {
         println!("");
     }
@@ -180,7 +183,7 @@ fn main() -> Result<(), std::io::Error> {
     for document in sized_docs {
         let output = format!("{} ({})", document.name, format_bytes(document.size));
         if document.is_dir {
-            println!("{}", output.blue());
+            println!("{}{}{}", BRIGHT_BLUE, output, RESET);
         } else {
             println!("{}", output);
         }
