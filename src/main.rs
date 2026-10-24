@@ -1,13 +1,18 @@
-use std::{env, fs::{self, DirEntry, Metadata}, io::Error, path::PathBuf, println};
+mod color;
+mod config;
+
+use color::Color;
 use console::Term;
-use indicatif::{ProgressBar, ProgressStyle};
+use std::{
+    env,
+    fs::{self, DirEntry, Metadata},
+    io::Error,
+    path::PathBuf,
+    println,
+};
 
 const MAX_BAR_WIDTH: usize = 40;
 const MIN_BAR_WIDTH: usize = 5;
-
-const GREEN: &str = "\x1b[38;2;95;184;143m";
-const BRIGHT_BLUE: &str = "\x1b[38;2;124;196;255m";
-const RESET: &str = "\x1b[0m";
 
 struct Document {
     name: String,
@@ -18,15 +23,15 @@ struct Document {
 
 fn format_bytes(bytes: u64) -> String {
     if bytes >= 1_000_000_000_000 {
-        return format!("{:.1} TiB", bytes as f64 / 1_000_000_000_000.0)
+        format!("{:.1} TiB", bytes as f64 / 1_000_000_000_000.0)
     } else if bytes >= 1_000_000_000 {
-        return format!("{:.1} GiB", bytes as f64 / 1_000_000_000.0)
+        format!("{:.1} GiB", bytes as f64 / 1_000_000_000.0)
     } else if bytes >= 1_000_000 {
-        return format!("{:.1} MiB", bytes as f64 / 1_000_000.0)
+        format!("{:.1} MiB", bytes as f64 / 1_000_000.0)
     } else if bytes >= 1_000 {
-        return format!("{:.1} KiB", bytes as f64 / 1_000.0)
+        format!("{:.1} KiB", bytes as f64 / 1_000.0)
     } else {
-        return format!("{}", bytes)
+        format!("{}", bytes)
     }
 }
 
@@ -42,6 +47,35 @@ fn bar_width(total_docs: usize) -> usize {
     term_width
         .saturating_sub(overhead)
         .clamp(MIN_BAR_WIDTH, MAX_BAR_WIDTH)
+}
+
+fn render_progress(
+    term: &Term,
+    message: &str,
+    completed: usize,
+    total: usize,
+    width: usize,
+    fill: &Color,
+    empty: &Color,
+) {
+    let fraction = if total == 0 {
+        1.0
+    } else {
+        completed as f64 / total as f64
+    };
+    let percent = (fraction * 100.0).round() as u32;
+    let filled = ((fraction * width as f64).round() as usize).min(width);
+    let remaining = width - filled;
+
+    let bar = format!(
+        "{}{}",
+        fill.paint(&"█".repeat(filled)),
+        empty.paint(&"░".repeat(remaining))
+    );
+
+    let _ = term.clear_line();
+    let _ = term.write_str(&format!("{} [{}] {}%", message, bar, percent));
+    let _ = term.flush();
 }
 
 fn get_metadata(path: Result<DirEntry, Error>) -> Result<(Metadata, PathBuf), Error> {
@@ -71,7 +105,10 @@ fn get_dir_size(path: PathBuf) -> Result<u64, std::io::Error> {
 fn print_help() {
     println!("Directory size viewer");
     println!();
-    println!("Usage: {} [OPTION]", env::args().next().unwrap_or_else(|| "dirsize".to_string()));
+    println!(
+        "Usage: {} [OPTION]",
+        env::args().next().unwrap_or_else(|| "dirsize".to_string())
+    );
     println!();
     println!("Options:");
     println!("  -a             Show all files including dot files");
@@ -79,6 +116,7 @@ fn print_help() {
     println!("  -v, --version  Show version information");
     println!();
     println!("With no arguments, lists all items sorted by storage size.");
+    println!("Colors are read from ./.lsr.conf (or $LSR_CONFIG).");
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -87,7 +125,7 @@ fn main() -> Result<(), std::io::Error> {
     let mut show_dot_files: bool = false;
 
     match args.next() {
-        None => {},
+        None => {}
         Some(arg) if arg == "-h" || arg == "--help" => {
             print_help();
             return Ok(());
@@ -105,13 +143,16 @@ fn main() -> Result<(), std::io::Error> {
         }
     }
 
+    let config = config::Config::load();
+
     let paths = fs::read_dir(".")?;
     let mut documents: Vec<Document> = Vec::new();
 
     for path in paths {
         match get_metadata(path) {
             Ok((metadata, path_buf)) => {
-                let name = path_buf.file_name()
+                let name = path_buf
+                    .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| path_buf.display().to_string());
 
@@ -128,26 +169,21 @@ fn main() -> Result<(), std::io::Error> {
 
     let mut sized_docs: Vec<Document> = Vec::new();
 
-    let progress = ProgressBar::new(100 as u64);
-    progress.set_style(
-        ProgressStyle::with_template(&format!(
-            "{{msg}} [{{bar:{}.bright_cyan/bright_blue}}] {{pos}}%",
-            bar_width(documents.len())
-        ))
-        .unwrap(),
-    );
-    progress.set_message("Scanning");
+    let total_docs = documents.len();
+    let progress_term = Term::stderr();
+    let show_progress = progress_term.is_term() && total_docs > 0;
+    let progress_width = bar_width(total_docs);
 
     let mut total_storage: u64 = 0;
 
-    for doc in &documents {
+    for (index, doc) in documents.iter().enumerate() {
         let real_size = if doc.is_dir {
             get_dir_size(doc.path.clone()).unwrap_or(0)
         } else {
             doc.size
         };
 
-        if show_dot_files == false {
+        if !show_dot_files {
             if !doc.name.starts_with('.') {
                 sized_docs.push(Document {
                     name: doc.name.clone(),
@@ -164,28 +200,42 @@ fn main() -> Result<(), std::io::Error> {
                 path: doc.path.clone(),
             });
         }
-        let increment: u64 = (100 / &documents.len()).try_into().unwrap();
 
         total_storage += real_size;
-        progress.inc(increment);
+
+        if show_progress {
+            render_progress(
+                &progress_term,
+                "Scanning",
+                index + 1,
+                total_docs,
+                progress_width,
+                &config.progress_fill,
+                &config.progress_empty,
+            );
+        }
     }
 
-    progress.finish_and_clear();
+    if show_progress {
+        let _ = progress_term.clear_line();
+        let _ = progress_term.flush();
+    }
 
     sized_docs.sort_by_key(|d| std::cmp::Reverse(d.size));
 
-    let total_storage_output = format!("Current directory storage: {}", format_bytes(total_storage));
-    println!("{}{}{}", GREEN, total_storage_output, RESET);
+    let total_storage_output =
+        format!("Current directory storage: {}", format_bytes(total_storage));
+    println!("{}", config.total.paint(&total_storage_output));
     if total_storage > 0 {
-        println!("");
+        println!();
     }
 
     for document in sized_docs {
         let output = format!("{} ({})", document.name, format_bytes(document.size));
         if document.is_dir {
-            println!("{}{}{}", BRIGHT_BLUE, output, RESET);
+            println!("{}", config.directory.paint(&output));
         } else {
-            println!("{}", output);
+            println!("{}", config.file.paint(&output));
         }
     }
 
