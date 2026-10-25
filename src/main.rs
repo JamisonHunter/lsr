@@ -1,42 +1,19 @@
 mod color;
 mod config;
+mod format;
+mod scan;
 
 use color::Color;
 use console::Term;
-use std::{
-    env,
-    fs::{self, DirEntry, Metadata},
-    io::Error,
-    path::PathBuf,
-    println,
-};
+use std::{env, path::Path, process::ExitCode};
 
 const MAX_BAR_WIDTH: usize = 40;
 const MIN_BAR_WIDTH: usize = 5;
+const EXIT_INCOMPLETE: u8 = 1;
+const EXIT_ERROR: u8 = 2;
 
-struct Document {
-    name: String,
-    size: u64,
-    is_dir: bool,
-    path: PathBuf,
-}
-
-fn format_bytes(bytes: u64) -> String {
-    if bytes >= 1_000_000_000_000 {
-        format!("{:.1} TiB", bytes as f64 / 1_000_000_000_000.0)
-    } else if bytes >= 1_000_000_000 {
-        format!("{:.1} GiB", bytes as f64 / 1_000_000_000.0)
-    } else if bytes >= 1_000_000 {
-        format!("{:.1} MiB", bytes as f64 / 1_000_000.0)
-    } else if bytes >= 1_000 {
-        format!("{:.1} KiB", bytes as f64 / 1_000.0)
-    } else {
-        format!("{}", bytes)
-    }
-}
-
-fn bar_width(total_docs: usize) -> usize {
-    let term_width = match Term::stdout().size_checked() {
+fn bar_width(total_docs: usize, term: &Term) -> usize {
+    let term_width = match term.size_checked() {
         Some((_, cols)) => cols as usize,
         None => return MAX_BAR_WIDTH,
     };
@@ -49,6 +26,7 @@ fn bar_width(total_docs: usize) -> usize {
         .clamp(MIN_BAR_WIDTH, MAX_BAR_WIDTH)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_progress(
     term: &Term,
     message: &str,
@@ -57,6 +35,7 @@ fn render_progress(
     width: usize,
     fill: &Color,
     empty: &Color,
+    colors_enabled: bool,
 ) {
     let fraction = if total == 0 {
         1.0
@@ -69,8 +48,8 @@ fn render_progress(
 
     let bar = format!(
         "{}{}",
-        fill.paint(&"█".repeat(filled)),
-        empty.paint(&"░".repeat(remaining))
+        fill.paint(&"█".repeat(filled), colors_enabled),
+        empty.paint(&"░".repeat(remaining), colors_enabled)
     );
 
     let _ = term.clear_line();
@@ -78,36 +57,12 @@ fn render_progress(
     let _ = term.flush();
 }
 
-fn get_metadata(path: Result<DirEntry, Error>) -> Result<(Metadata, PathBuf), Error> {
-    let entry = path?;
-    let path_buf = entry.path();
-    let metadata = fs::metadata(&path_buf)?;
-    Ok((metadata, path_buf))
-}
-
-fn get_dir_size(path: PathBuf) -> Result<u64, std::io::Error> {
-    let paths = fs::read_dir(&path)?;
-    let mut total_size: u64 = 0;
-
-    for path_entry in paths {
-        let entry = path_entry?;
-        let metadata = entry.metadata()?;
-
-        if metadata.is_dir() {
-            total_size += get_dir_size(entry.path())?;
-        } else {
-            total_size += metadata.len();
-        }
-    }
-    Ok(total_size)
-}
-
 fn print_help() {
     println!("Directory size viewer");
     println!();
     println!(
         "Usage: {} [OPTION]",
-        env::args().next().unwrap_or_else(|| "dirsize".to_string())
+        env::args().next().unwrap_or_else(|| "lsr".to_string())
     );
     println!();
     println!("Options:");
@@ -115,93 +70,116 @@ fn print_help() {
     println!("  -h, --help     Show this help message");
     println!("  -v, --version  Show version information");
     println!();
-    println!("With no arguments, lists all items sorted by storage size.");
+    println!("lsr scans the current directory and takes no positional arguments.");
+    println!("With no options, lists all items sorted by size.");
     println!("Colors are read from ./.lsr.conf (or $LSR_CONFIG).");
+    println!("Set NO_COLOR to disable colors.");
+    println!();
+    println!("Exit status:");
+    println!("  0  scan complete");
+    println!("  1  scan incomplete (some paths could not be read)");
+    println!("  2  usage or fatal error");
 }
 
-fn main() -> Result<(), std::io::Error> {
-    let mut args = env::args().skip(1);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Action {
+    Run,
+    Help,
+    Version,
+}
 
-    let mut show_dot_files: bool = false;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Options {
+    show_dot_files: bool,
+    action: Action,
+}
 
-    match args.next() {
-        None => {}
-        Some(arg) if arg == "-h" || arg == "--help" => {
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            show_dot_files: false,
+            action: Action::Run,
+        }
+    }
+}
+
+fn parse_args<I>(args: I) -> Result<Options, String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut options = Options::default();
+    let mut help = false;
+    let mut version = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "-a" => options.show_dot_files = true,
+            "-h" | "--help" => help = true,
+            "-v" | "--version" => version = true,
+            _ => {
+                return Err(format!(
+                    "unexpected argument '{}'; try '--help' for usage",
+                    format::escape_name(&arg)
+                ));
+            }
+        }
+    }
+
+    options.action = if help {
+        Action::Help
+    } else if version {
+        Action::Version
+    } else {
+        Action::Run
+    };
+
+    Ok(options)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScanStatus {
+    Complete,
+    Incomplete,
+}
+
+fn run() -> Result<ScanStatus, String> {
+    let options = parse_args(env::args().skip(1))?;
+
+    match options.action {
+        Action::Help => {
             print_help();
-            return Ok(());
+            return Ok(ScanStatus::Complete);
         }
-        Some(arg) if arg == "-v" || arg == "--version" => {
+        Action::Version => {
             println!("{}", env!("CARGO_PKG_VERSION"));
-            return Ok(());
+            return Ok(ScanStatus::Complete);
         }
-        Some(arg) if arg == "-a" => {
-            show_dot_files = true;
-        }
-        Some(_) => {
-            eprintln!("Invalid argument. Use -h or --help for usage information.");
-            std::process::exit(1);
-        }
+        Action::Run => {}
     }
 
     let config = config::Config::load();
+    let stdout_colors = Term::stdout().features().colors_supported();
+    let progress_term = Term::stderr();
+    let stderr_colors = progress_term.features().colors_supported();
 
-    let paths = fs::read_dir(".")?;
-    let mut documents: Vec<Document> = Vec::new();
-
-    for path in paths {
-        match get_metadata(path) {
-            Ok((metadata, path_buf)) => {
-                let name = path_buf
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| path_buf.display().to_string());
-
-                documents.push(Document {
-                    name,
-                    size: metadata.len(),
-                    is_dir: metadata.is_dir(),
-                    path: path_buf,
-                });
-            }
-            Err(_) => continue,
-        }
-    }
-
-    let mut sized_docs: Vec<Document> = Vec::new();
+    let mut issues = Vec::new();
+    let mut documents = scan::collect_documents(Path::new("."), &mut issues)
+        .map_err(|error| format!("cannot read current directory: {error}"))?;
 
     let total_docs = documents.len();
-    let progress_term = Term::stderr();
     let show_progress = progress_term.is_term() && total_docs > 0;
-    let progress_width = bar_width(total_docs);
+    let progress_width = bar_width(total_docs, &progress_term);
 
     let mut total_storage: u64 = 0;
 
-    for (index, doc) in documents.iter().enumerate() {
-        let real_size = if doc.is_dir {
-            get_dir_size(doc.path.clone()).unwrap_or(0)
-        } else {
-            doc.size
-        };
-
-        if !show_dot_files {
-            if !doc.name.starts_with('.') {
-                sized_docs.push(Document {
-                    name: doc.name.clone(),
-                    size: real_size,
-                    is_dir: doc.is_dir,
-                    path: doc.path.clone(),
-                });
-            }
-        } else {
-            sized_docs.push(Document {
-                name: doc.name.clone(),
-                size: real_size,
-                is_dir: doc.is_dir,
-                path: doc.path.clone(),
-            });
+    for (index, document) in documents.iter_mut().enumerate() {
+        if document.is_dir {
+            let result = scan::scan_dir(&document.path, &mut issues);
+            document.size = result.bytes;
+            document.incomplete = result.incomplete;
         }
 
-        total_storage += real_size;
+        total_storage = total_storage.saturating_add(document.size);
 
         if show_progress {
             render_progress(
@@ -212,6 +190,7 @@ fn main() -> Result<(), std::io::Error> {
                 progress_width,
                 &config.progress_fill,
                 &config.progress_empty,
+                stderr_colors,
             );
         }
     }
@@ -221,80 +200,141 @@ fn main() -> Result<(), std::io::Error> {
         let _ = progress_term.flush();
     }
 
-    sized_docs.sort_by_key(|d| std::cmp::Reverse(d.size));
+    for issue in &issues {
+        eprintln!(
+            "lsr: warning: cannot access {}: {}",
+            format::escape_path(&issue.path),
+            issue.error
+        );
+    }
 
-    let total_storage_output =
-        format!("Current directory storage: {}", format_bytes(total_storage));
-    println!("{}", config.total.paint(&total_storage_output));
+    let incomplete = !issues.is_empty();
+
+    let mut sized_docs: Vec<scan::Document> = documents
+        .into_iter()
+        .filter(|document| options.show_dot_files || !document.name.starts_with('.'))
+        .collect();
+    sized_docs.sort_by_key(|document| std::cmp::Reverse(document.size));
+
+    let mut total_output = format!(
+        "Current directory size: {}",
+        format::format_bytes(total_storage)
+    );
+    if incomplete {
+        total_output.push_str(" (incomplete)");
+    }
+    println!("{}", config.total.paint(&total_output, stdout_colors));
     if total_storage > 0 {
         println!();
     }
 
     for document in sized_docs {
-        let output = format!("{} ({})", document.name, format_bytes(document.size));
-        if document.is_dir {
-            println!("{}", config.directory.paint(&output));
+        let annotation = if document.incomplete {
+            ", incomplete"
         } else {
-            println!("{}", config.file.paint(&output));
+            ""
+        };
+        let output = format!(
+            "{} ({}{})",
+            format::escape_name(&document.name),
+            format::format_bytes(document.size),
+            annotation
+        );
+
+        if document.is_dir {
+            println!("{}", config.directory.paint(&output, stdout_colors));
+        } else {
+            println!("{}", config.file.paint(&output, stdout_colors));
         }
     }
 
-    Ok(())
+    Ok(if incomplete {
+        ScanStatus::Incomplete
+    } else {
+        ScanStatus::Complete
+    })
+}
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(ScanStatus::Complete) => ExitCode::SUCCESS,
+        Ok(ScanStatus::Incomplete) => ExitCode::from(EXIT_INCOMPLETE),
+        Err(error) => {
+            eprintln!("lsr: error: {}", error);
+            ExitCode::from(EXIT_ERROR)
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn temp_dir(name: &str) -> PathBuf {
-        let dir = env::temp_dir().join(format!("lsr-test-{}-{}", name, std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
+    fn parse(args: &[&str]) -> Result<Options, String> {
+        parse_args(args.iter().map(|arg| arg.to_string()))
     }
 
     #[test]
-    fn format_bytes_below_one_kilobyte() {
-        assert_eq!(format_bytes(0), "0");
-        assert_eq!(format_bytes(999), "999");
+    fn no_arguments_runs_the_scan() {
+        assert_eq!(
+            parse(&[]).unwrap(),
+            Options {
+                show_dot_files: false,
+                action: Action::Run,
+            }
+        );
     }
 
     #[test]
-    fn format_bytes_unit_boundaries() {
-        assert_eq!(format_bytes(1_000), "1.0 KiB");
-        assert_eq!(format_bytes(1_000_000), "1.0 MiB");
-        assert_eq!(format_bytes(1_000_000_000), "1.0 GiB");
-        assert_eq!(format_bytes(1_000_000_000_000), "1.0 TiB");
+    fn accepts_all_supported_arguments() {
+        assert_eq!(
+            parse(&["-a"]).unwrap(),
+            Options {
+                show_dot_files: true,
+                action: Action::Run,
+            }
+        );
+        assert_eq!(parse(&["-h"]).unwrap().action, Action::Help);
+        assert_eq!(parse(&["--help"]).unwrap().action, Action::Help);
+        assert_eq!(parse(&["-v"]).unwrap().action, Action::Version);
+        assert_eq!(parse(&["--version"]).unwrap().action, Action::Version);
     }
 
     #[test]
-    fn format_bytes_rounds_to_one_decimal() {
-        assert_eq!(format_bytes(1_550), "1.6 KiB");
-        assert_eq!(format_bytes(999_999), "1000.0 KiB");
+    fn allows_duplicate_and_combined_valid_flags() {
+        assert_eq!(
+            parse(&["-a", "-a"]).unwrap(),
+            Options {
+                show_dot_files: true,
+                action: Action::Run,
+            }
+        );
+        assert_eq!(parse(&["-a", "-v"]).unwrap().action, Action::Version);
+        assert_eq!(parse(&["-v", "-a"]).unwrap().action, Action::Version);
     }
 
     #[test]
-    fn get_dir_size_empty_dir_is_zero() {
-        let dir = temp_dir("empty");
-        assert_eq!(get_dir_size(dir.clone()).unwrap(), 0);
-        fs::remove_dir_all(dir).unwrap();
+    fn help_takes_precedence_over_version() {
+        assert_eq!(parse(&["-v", "-h"]).unwrap().action, Action::Help);
+        assert_eq!(parse(&["-h", "-v"]).unwrap().action, Action::Help);
     }
 
     #[test]
-    fn get_dir_size_sums_nested_files() {
-        let dir = temp_dir("nested");
-        fs::write(dir.join("a.txt"), vec![0u8; 100]).unwrap();
-        fs::create_dir_all(dir.join("sub/deeper")).unwrap();
-        fs::write(dir.join("sub/b.txt"), vec![0u8; 250]).unwrap();
-        fs::write(dir.join("sub/deeper/c.txt"), vec![0u8; 50]).unwrap();
-
-        assert_eq!(get_dir_size(dir.clone()).unwrap(), 400);
-        fs::remove_dir_all(dir).unwrap();
+    fn rejects_unexpected_arguments() {
+        let error = parse(&["-a", "unexpected"]).unwrap_err();
+        assert!(error.contains("unexpected argument 'unexpected'"));
+        assert!(error.contains("--help"));
     }
 
     #[test]
-    fn get_dir_size_missing_dir_is_error() {
-        let dir = env::temp_dir().join("lsr-test-does-not-exist");
-        assert!(get_dir_size(dir).is_err());
+    fn validates_every_argument_before_handling_help() {
+        assert!(parse(&["--help", "unexpected"]).is_err());
+    }
+
+    #[test]
+    fn escapes_control_characters_in_argument_errors() {
+        let error = parse(&["bad\narg"]).unwrap_err();
+        assert!(error.contains("bad\\narg"));
+        assert!(!error.contains('\n'));
     }
 }

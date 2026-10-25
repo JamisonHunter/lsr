@@ -41,11 +41,12 @@ impl Color {
         }
     }
 
-    pub fn paint(&self, text: &str) -> String {
-        match self {
-            Color::Default => text.to_string(),
-            _ => format!("{}{}\x1b[0m", self.prefix(), text),
+    pub fn paint(&self, text: &str, enabled: bool) -> String {
+        if !enabled || matches!(self, Color::Default) {
+            return text.to_string();
         }
+
+        format!("{}{}\x1b[0m", self.prefix(), text)
     }
 }
 
@@ -74,6 +75,13 @@ fn named(value: &str) -> Option<Color> {
 }
 
 fn parse_hex(hex: &str) -> Result<Color, String> {
+    if !hex.is_ascii() {
+        return Err(format!(
+            "invalid hex color '#{}' (expected #RGB or #RRGGBB using ASCII hex digits)",
+            hex
+        ));
+    }
+
     match hex.len() {
         3 => {
             let r = hex_digit(&hex[0..1])?;
@@ -139,6 +147,14 @@ mod tests {
     }
 
     #[test]
+    fn rejects_non_ascii_hex_without_panicking() {
+        assert!(Color::parse("#€").is_err());
+        assert!(Color::parse("#€€").is_err());
+        assert!(Color::parse("#é").is_err());
+        assert!(Color::parse("#１２３").is_err());
+    }
+
+    #[test]
     fn builds_ansi_prefixes() {
         assert_eq!(Color::Default.prefix(), "");
         assert_eq!(Color::Ansi(96).prefix(), "\x1b[96m");
@@ -147,10 +163,11 @@ mod tests {
     }
 
     #[test]
-    fn paint_leaves_default_text_untouched() {
-        assert_eq!(Color::Default.paint("hello"), "hello");
+    fn paint_respects_the_enabled_flag() {
+        assert_eq!(Color::Default.paint("hello", true), "hello");
+        assert_eq!(Color::Rgb(1, 2, 3).paint("hello", false), "hello");
         assert_eq!(
-            Color::Rgb(1, 2, 3).paint("hello"),
+            Color::Rgb(1, 2, 3).paint("hello", true),
             "\x1b[38;2;1;2;3mhello\x1b[0m"
         );
     }

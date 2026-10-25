@@ -1,6 +1,6 @@
 # LSR
 
-A lightweight CLI tool made in Rust for browsing local files with recursive file sizing. 
+A lightweight CLI tool made in Rust for browsing local files with recursive file sizing.
 
 ## Motivation
 
@@ -47,8 +47,47 @@ Options:
   -v, --version  Show version information
 ```
 
-lsr always scans the directory you are currently in. Run it with no arguments to
-list everything in that directory, sorted largest to smallest. Directory sizes are the recursive total of everything inside of them, so you can see how much space a folder is really using.
+lsr always scans the directory you are currently in. It accepts no positional
+arguments; any extra arguments are rejected. With no options it lists all
+non-dot entries sorted largest to smallest. Directory sizes are the recursive
+total of the logical file lengths inside them.
+
+### How sizes are measured
+
+- Sizes are logical file lengths (`metadata.len()`), not allocated disk blocks.
+- Units are decimal: 1 kB = 1,000 bytes, 1 MB = 1,000 kB, and so on through TB.
+- Directory metadata itself is not included in directory sizes.
+- Sparse files report their apparent length, which can be much larger than the
+  disk space they actually consume.
+- Hard links are counted once per directory entry, so the same file content can
+  be counted more than once.
+- Symbolic links are never followed. A link is listed as a file, and its own
+  metadata length is counted rather than the size of its target.
+- Dotfiles are included in the grand total even when `-a` is omitted. The `-a`
+  option only controls which entries are displayed.
+
+### Errors and exit status
+
+If a path cannot be read, lsr prints a path-specific warning to stderr, keeps
+the bytes it was able to count, and marks the affected entry and the grand total
+as `(incomplete)`. Entries whose metadata cannot be read are reported and
+omitted from the listing. Control characters in file names are escaped so they
+cannot break the output layout or inject terminal escape sequences.
+
+| Status | Meaning |
+| --- | --- |
+| 0 | Scan complete. |
+| 1 | Scan incomplete; one or more paths could not be read. |
+| 2 | Usage error or fatal error. |
+
+Configuration warnings are reported on stderr but do not change the exit
+status.
+
+### Colors
+
+Colors are only emitted when the relevant output stream is a terminal. Set
+`NO_COLOR` to disable colors regardless of terminal support. `TERM=dumb` also
+disables them.
 
 ## Configuration
 
@@ -61,12 +100,13 @@ LSR_CONFIG=~/my-lsr.conf lsr
 ```
 
 If no config file is found, the built-in defaults are used. The file uses simple
-`key = value` lines; blank lines and lines starting with `#` are ignored.
+`key = value` lines. Blank lines and lines starting with `#` are ignored. A
+trailing `# comment` is also ignored when the `#` is preceded by whitespace.
 
 ```conf
 # Colors accept: #RRGGBB, #RGB, named ANSI colors, 0-255, or "default"
 
-total = #5FB88F                    # "Current directory storage" line
+total = #5FB88F                    # "Current directory size" line
 directory = #7CC4FF                # directory names
 file = default                     # regular file names
 
@@ -76,4 +116,5 @@ progress_empty = bright_blue       # remaining part of the bar
 
 Named colors are `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`,
 `white`, and their `bright_` variants. Numeric values use the ANSI 256-color
-palette. Invalid settings are reported on stderr and skipped.
+palette. Invalid settings are reported on stderr and skipped; the previous or
+default value is kept.

@@ -90,7 +90,7 @@ fn parse(contents: &str, source: &str) -> (Config, Vec<String>) {
         };
 
         let key = key.trim().to_ascii_lowercase();
-        let value = value.trim();
+        let value = strip_inline_comment(value.trim());
 
         let Some(slot) = field_mut(&mut config, &key) else {
             warnings.push(format!(
@@ -114,6 +114,23 @@ fn parse(contents: &str, source: &str) -> (Config, Vec<String>) {
     }
 
     (config, warnings)
+}
+
+/// Removes a trailing `# comment` when the `#` is preceded by whitespace.
+///
+/// A leading `#` belongs to a hex color and is preserved.
+fn strip_inline_comment(value: &str) -> &str {
+    let mut previous_was_whitespace = false;
+
+    for (index, character) in value.char_indices() {
+        if character == '#' && index > 0 && previous_was_whitespace {
+            return value[..index].trim_end();
+        }
+
+        previous_was_whitespace = character.is_whitespace();
+    }
+
+    value
 }
 
 fn field_mut<'a>(config: &'a mut Config, key: &str) -> Option<&'a mut Color> {
@@ -203,5 +220,38 @@ mod tests {
         assert_eq!(config, Config::default());
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("expected 'key = value'"));
+    }
+
+    #[test]
+    fn strips_inline_comments() {
+        let (config, warnings) = parse(
+            "total = #5FB88F # summary line\n\
+             directory = blue\t# directory names\n\
+             file = default # regular files\n",
+            "test",
+        );
+
+        assert!(warnings.is_empty(), "warnings: {:?}", warnings);
+        assert_eq!(config.total, Color::Rgb(95, 184, 143));
+        assert_eq!(config.directory, Color::Ansi(34));
+        assert_eq!(config.file, Color::Default);
+    }
+
+    #[test]
+    fn requires_whitespace_before_inline_comment() {
+        let (config, warnings) = parse("file = #fff#comment\n", "test");
+
+        assert_eq!(config, Config::default());
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("invalid hex color"));
+    }
+
+    #[test]
+    fn warns_on_non_ascii_hex_without_panicking() {
+        let (config, warnings) = parse("directory = #€\n", "test");
+
+        assert_eq!(config, Config::default());
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("invalid hex color"));
     }
 }
